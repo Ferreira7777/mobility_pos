@@ -1,4 +1,3 @@
-import React from 'react';
 import { Receipt, X, RefreshCw } from 'lucide-react';
 import type { Order } from '../db';
 

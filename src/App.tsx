@@ -7,13 +7,11 @@ import {
   Plus, 
   Minus, 
   Trash2, 
-  Check, 
   DollarSign, 
   UtensilsCrossed, 
   Coffee, 
   IceCream, 
   Soup, 
-  Flame,
   LayoutGrid,
   Settings,
   X,
@@ -46,7 +44,7 @@ export default function App() {
 
   // Estados do Modal de Gestão / Admin
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminTab, setAdminTab] = useState<'artigos' | 'vendas' | 'pagamentos' | 'configuracoes'>('artigos');
+  const [adminTab, setAdminTab] = useState<'artigos' | 'vendas' | 'vendas_artigo' | 'pagamentos' | 'configuracoes'>('artigos');
   const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
@@ -961,7 +959,7 @@ export default function App() {
     } else if (adminTab === 'artigos') {
       title = 'Lista de Artigos';
       headers = ['ID', 'Nome', 'Categoria', 'Preço'];
-      rows = menuItems.map(item => [
+      rows = menu.map((item: any) => [
         item.id?.toString() || '—',
         item.name,
         item.category,
