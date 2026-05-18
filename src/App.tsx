@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import { ZReportModal } from './components/ZReportModal';
-import { supabase } from './supabaseClient';
+import { supabase, syncOfflineData } from './supabaseClient';
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -307,6 +307,7 @@ export default function App() {
     });
 
     loadData();
+    syncOfflineData(); // Tenta sincronizar imediatamente com o Supabase
   };
 
   // Remover item completamente do pedido
@@ -403,6 +404,7 @@ export default function App() {
     });
 
     loadData();
+    syncOfflineData(); // Tenta sincronizar imediatamente com o Supabase
   };
 
   // Fechar conta - abre o modal de seleção de forma de pagamento
@@ -432,6 +434,7 @@ export default function App() {
     setActiveOrder(null);
     setSelectedTable(null);
     loadData();
+    syncOfflineData(); // Tenta sincronizar imediatamente com o Supabase
   };
 
   // Adicionar nova forma de pagamento
@@ -529,24 +532,39 @@ export default function App() {
       for (const order of ordersToArchive) {
         await db.orders.update(order.id!, { status: 'archived' });
       }
+      
+      // Registar ação de arquivamento de faturas em massa na fila de sincronização
+      await db.syncQueue.add({
+        action: 'archive_orders',
+        payload: JSON.stringify({ ids: ordersToArchive.map(o => o.id) }),
+        status: 'pending',
+        createdAt: Date.now()
+      });
+
       setShowZReportModal(false);
       loadData();
+      
+      // Sincronizar instantaneamente com o Supabase se houver internet
+      syncOfflineData();
     }
   };
 
-  // Forçar Sincronização Simulada
+  // Forçar Sincronização Real com o Supabase
   const handleForceSync = () => {
     setIsSyncing(true);
     syncMenuFromSupabase(); // Sincronizar ementa ativamente
-    setTimeout(async () => {
-      // Limpa a fila de sincronização pendente definindo como "synced"
-      const pendings = await db.syncQueue.where({ status: 'pending' }).toArray();
-      for (const p of pendings) {
-        await db.syncQueue.update(p.id!, { status: 'synced' });
-      }
-      setIsSyncing(false);
-      loadData();
-    }, 1500);
+    
+    // Executar a sincronização real das transações pendentes
+    syncOfflineData()
+      .then(() => {
+        setIsSyncing(false);
+        loadData();
+      })
+      .catch(err => {
+        console.error("Erro na sincronização forçada:", err);
+        setIsSyncing(false);
+        loadData();
+      });
   };
 
   // Processar carregamento de ficheiro local de imagem e converter para Base64
@@ -993,6 +1011,8 @@ export default function App() {
     let title = '';
     let headers: string[] = [];
     let rows: string[][] = [];
+    let summaryHtml = '';
+    let tfootHtml = '';
 
     const filteredOrders = completedOrders.filter(order => {
       const orderDate = new Date(order.createdAt);
@@ -1021,16 +1041,40 @@ export default function App() {
       });
       const sortedSales = Array.from(itemSalesMap.values()).sort((a, b) => b.total - a.total);
       
+      const printTotalUnits = sortedSales.reduce((sum, item) => sum + item.quantity, 0);
+      const printTotalValue = sortedSales.reduce((sum, item) => sum + item.total, 0);
+
       rows = sortedSales.map(sale => [
         sale.name,
         `${sale.price.toFixed(2)}€`,
         sale.quantity.toString(),
         `${sale.total.toFixed(2)}€`
       ]);
+
+      summaryHtml = `
+        <div class="summary-box">
+          <div><strong>Total Faturado (Valor):</strong> ${printTotalValue.toFixed(2)}€</div>
+          <div><strong>Total de Unidades:</strong> ${printTotalUnits}</div>
+        </div>
+      `;
+
+      tfootHtml = `
+        <tfoot>
+          <tr class="tfoot-row">
+            <td>Total Geral</td>
+            <td class="text-right">—</td>
+            <td class="text-right">${printTotalUnits}</td>
+            <td class="text-right">${printTotalValue.toFixed(2)}€</td>
+          </tr>
+        </tfoot>
+      `;
     } else if (adminTab === 'vendas') {
       title = 'Histórico de Vendas';
       headers = ['ID / Data', 'Origem', 'Artigos', 'Pagamento', 'Total'];
       
+      const printTotalUnits = filteredOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+      const printTotalValue = filteredOrders.reduce((sum, o) => sum + o.total, 0);
+
       rows = filteredOrders.map(order => [
         `#${order.id} - ${new Date(order.createdAt).toLocaleString('pt-PT')}`,
         order.tableId === 0 ? "Balcão" : `Mesa ${order.tableId}`,
@@ -1038,6 +1082,23 @@ export default function App() {
         order.paymentMethod || '—',
         `${order.total.toFixed(2)}€`
       ]);
+
+      summaryHtml = `
+        <div class="summary-box">
+          <div><strong>Total Faturado (Valor):</strong> ${printTotalValue.toFixed(2)}€</div>
+          <div><strong>Total de Unidades:</strong> ${printTotalUnits}</div>
+          <div><strong>Número de Vendas:</strong> ${filteredOrders.length}</div>
+        </div>
+      `;
+
+      tfootHtml = `
+        <tfoot>
+          <tr class="tfoot-row">
+            <td colspan="4">Total Geral</td>
+            <td class="text-right">${printTotalValue.toFixed(2)}€</td>
+          </tr>
+        </tfoot>
+      `;
     } else if (adminTab === 'artigos') {
       title = 'Lista de Artigos';
       headers = ['ID', 'Nome', 'Categoria', 'Preço'];
@@ -1066,6 +1127,23 @@ export default function App() {
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
             th { background-color: #f5f5f5; font-weight: bold; }
             .text-right { text-align: right; }
+            .summary-box {
+              display: flex;
+              gap: 20px;
+              background-color: #f9f9f9;
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              padding: 10px 15px;
+              margin-bottom: 15px;
+              font-size: 13px;
+            }
+            .tfoot-row {
+              font-weight: bold;
+              background-color: #f5f5f5;
+            }
+            .tfoot-row td {
+              border-top: 2px solid #333;
+            }
             @media print {
               body { padding: 0; }
               button { display: none; }
@@ -1076,6 +1154,9 @@ export default function App() {
           <h1>${title}</h1>
           <p>Gerado em: ${new Date().toLocaleString('pt-PT')}</p>
           ${startDateFilter || endDateFilter ? `<p>Período: ${startDateFilter || 'Sempre'} até ${endDateFilter || 'Sempre'}</p>` : ''}
+          
+          ${summaryHtml}
+
           <table>
             <thead>
               <tr>
@@ -1085,10 +1166,11 @@ export default function App() {
             <tbody>
               ${rows.map(row => `
                 <tr>
-                  ${row.map((cell, idx) => `<td class="${idx === row.length - 1 ? 'text-right' : ''}">${cell}</td>`).join('')}
+                  ${row.map((cell, idx) => `<td class="${idx === row.length - 1 || (adminTab === 'vendas_artigo' && idx === 2) ? 'text-right' : ''}">${cell}</td>`).join('')}
                 </tr>
               `).join('')}
             </tbody>
+            ${tfootHtml}
           </table>
           <script>
             window.onload = () => { window.print(); window.close(); };
