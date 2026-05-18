@@ -9,8 +9,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      injectRegister: 'inline', // Injeta automaticamente a ativação do Service Worker no index.html
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'icons.svg'],
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'] // Garante o cache de todos os recursos locais do POS
+      },
       manifest: {
         name: 'Mobility POS - Restauração',
         short_name: 'Mobility POS',
