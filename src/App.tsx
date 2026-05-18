@@ -749,6 +749,8 @@ export default function App() {
     });
     
     const sortedSales = Array.from(itemSalesMap.values()).sort((a, b) => b.total - a.total);
+    const totalUnits = sortedSales.reduce((sum, item) => sum + item.quantity, 0);
+    const totalVal = sortedSales.reduce((sum, item) => sum + item.total, 0);
     
     return (
       <div className="space-y-6">
@@ -782,6 +784,22 @@ export default function App() {
           </button>
         </div>
 
+        {/* Cards de Resumo */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-slate-900/30 p-5 rounded-2xl border border-slate-900/5 dark:border-white/5">
+            <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 light:text-slate-600 block tracking-wider mb-1">Total Faturado (Valor)</span>
+            <span className="text-3xl font-extrabold text-brand-700 dark:text-brand-300">
+              {totalVal.toFixed(2)}€
+            </span>
+          </div>
+          <div className="bg-white dark:bg-slate-900/30 p-5 rounded-2xl border border-slate-900/5 dark:border-white/5">
+            <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 light:text-slate-600 block tracking-wider mb-1">Total de Unidades</span>
+            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+              {totalUnits}
+            </span>
+          </div>
+        </div>
+
         {/* Tabela de Vendas por Artigo */}
         <div className="border border-slate-900/5 dark:border-white/5 rounded-2xl overflow-hidden bg-white/50 dark:bg-slate-900/10">
           <div className="max-h-[60vh] overflow-y-auto">
@@ -809,6 +827,14 @@ export default function App() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100/40 dark:bg-slate-950/20 border-t border-slate-900/10 dark:border-white/10 text-sm font-extrabold text-slate-900 dark:text-white">
+                    <td className="p-3 font-bold">Total Geral</td>
+                    <td className="p-3 text-right text-slate-400 font-medium">—</td>
+                    <td className="p-3 text-right font-extrabold text-slate-900 dark:text-white">{totalUnits}</td>
+                    <td className="p-3 text-right text-brand-700 dark:text-brand-300 font-extrabold">{totalVal.toFixed(2)}€</td>
+                  </tr>
+                </tfoot>
               </table>
             )}
           </div>
@@ -862,11 +888,17 @@ export default function App() {
         </div>
 
         {/* Cards de Resumo */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-slate-900/30 p-5 rounded-2xl border border-slate-900/5 dark:border-white/5">
-            <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 light:text-slate-600 block tracking-wider mb-1">Total Faturado</span>
+            <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 light:text-slate-600 block tracking-wider mb-1">Total Faturado (Valor)</span>
             <span className="text-3xl font-extrabold text-brand-700 dark:text-brand-300">
               {filteredOrders.reduce((sum, o) => sum + o.total, 0).toFixed(2)}€
+            </span>
+          </div>
+          <div className="bg-white dark:bg-slate-900/30 p-5 rounded-2xl border border-slate-900/5 dark:border-white/5">
+            <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 light:text-slate-600 block tracking-wider mb-1">Total de Unidades</span>
+            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+              {filteredOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0)}
             </span>
           </div>
           <div className="bg-white dark:bg-slate-900/30 p-5 rounded-2xl border border-slate-900/5 dark:border-white/5">
@@ -941,6 +973,13 @@ export default function App() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-100/40 dark:bg-slate-950/20 border-t border-slate-900/10 dark:border-white/10 text-sm font-extrabold text-slate-900 dark:text-white">
+                      <td className="p-3 font-bold" colSpan={4}>Total Geral</td>
+                      <td className="p-3 text-right text-brand-700 dark:text-brand-300 font-extrabold">{filteredOrders.reduce((sum, o) => sum + o.total, 0).toFixed(2)}€</td>
+                      <td className="p-3"></td>
+                    </tr>
+                  </tfoot>
                 </table>
               )}
             </div>
