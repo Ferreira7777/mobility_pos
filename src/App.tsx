@@ -23,11 +23,12 @@ import {
   Receipt,
   LogOut,
   Printer,
+  Download,
   UserPlus
 } from 'lucide-react';
 
 import { ZReportModal } from './components/ZReportModal';
-import { supabase, syncOfflineData, syncAllHistoricalOrders } from './supabaseClient';
+import { supabase, syncOfflineData, syncAllHistoricalOrders, restoreDataFromSupabase } from './supabaseClient';
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -76,7 +77,24 @@ export default function App() {
   // Inicializar base de dados e carregar dados
   useEffect(() => {
     async function init() {
-      await seedDatabase();
+      // 1. Tentar restaurar a base de dados a partir do Supabase caso a BD local esteja vazia
+      let restored = false;
+      const localTableCount = await db.restaurantTables.count();
+      const localOrderCount = await db.orders.count();
+      
+      if ((localTableCount === 0 || localOrderCount === 0) && navigator.onLine) {
+        try {
+          restored = await restoreDataFromSupabase();
+        } catch (err) {
+          console.error("Falha ao restaurar dados do Supabase:", err);
+        }
+      }
+      
+      // 2. Se não conseguiu restaurar (ou estava offline/vazio), corre o seed normal com dados padrão
+      if (!restored) {
+        await seedDatabase();
+      }
+      
       await loadData();
       syncMenuFromSupabase(); // Sincronizar ementa em segundo plano, sem bloquear o POS
     }
@@ -568,6 +586,37 @@ export default function App() {
         console.error("Erro na sincronização forçada:", err);
         setIsSyncing(false);
         loadData();
+      });
+  };
+
+  // Restaurar Base de Dados a partir do Supabase (Disaster Recovery manual)
+  const handleRestoreFromSupabase = () => {
+    if (!navigator.onLine) {
+      alert("Erro: Precisa de estar ligado à Internet para restaurar os dados do Supabase!");
+      return;
+    }
+
+    const confirmRestore = window.confirm(
+      "Aviso: Esta ação irá APAGAR TODOS os dados locais deste navegador (artigos, mesas, vendas e formas de pagamento) e irá repô-los com a informação guardada na sua última sincronização com o Supabase. Tem a certeza que deseja continuar?"
+    );
+
+    if (!confirmRestore) return;
+
+    setIsSyncing(true);
+    restoreDataFromSupabase()
+      .then((success) => {
+        setIsSyncing(false);
+        if (success) {
+          loadData();
+          alert("Recuperação concluída! Toda a informação do Supabase foi reposta com sucesso nesta aplicação.");
+        } else {
+          alert("O Supabase não contém dados ou ocorreu um erro durante a recuperação. Os dados locais não foram alterados.");
+        }
+      })
+      .catch(err => {
+        console.error("Erro na recuperação de dados:", err);
+        setIsSyncing(false);
+        alert("Ocorreu um erro ao restaurar os dados: " + err.message);
       });
   };
 
@@ -1328,6 +1377,16 @@ export default function App() {
             title="Sincronizar Dados"
           >
             <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-brand-400' : ''}`} />
+          </button>
+
+          {/* Botão de Restaurar Dados do Supabase */}
+          <button 
+            onClick={handleRestoreFromSupabase}
+            disabled={isSyncing}
+            className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 disabled:opacity-50"
+            title="Restaurar Dados do Supabase"
+          >
+            <Download className={`w-5 h-5 ${isSyncing ? 'animate-pulse' : ''}`} />
           </button>
 
           {/* Botão de Alternar Tema (Dark/Light) */}

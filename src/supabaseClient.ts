@@ -232,3 +232,119 @@ export async function syncAllHistoricalOrders() {
   }
 }
 
+// Serviço para restaurar a base de dados IndexedDB local a partir do Supabase (Disaster Recovery)
+export async function restoreDataFromSupabase(): Promise<boolean> {
+  if (!navigator.onLine) return false;
+  console.log("[Restore] A iniciar recuperação de desastres a partir do Supabase...");
+
+  try {
+    // 1. Carregar dados das tabelas do Supabase em paralelo
+    const [
+      { data: remoteMenu, error: menuErr },
+      { data: remoteTables, error: tablesErr },
+      { data: remoteOrders, error: ordersErr },
+      { data: remotePaymentMethods, error: paymentsErr }
+    ] = await Promise.all([
+      supabase.from('menu_items').select('*'),
+      supabase.from('restaurant_tables').select('*'),
+      supabase.from('orders').select('*'),
+      supabase.from('payment_methods').select('*')
+    ]);
+
+    // Se houver erros graves nas consultas ao Supabase, aborta a restauração
+    if (menuErr || tablesErr || ordersErr || paymentsErr) {
+      console.error("[Restore] Falha ao descarregar tabelas do Supabase:", {
+        menuErr,
+        tablesErr,
+        ordersErr,
+        paymentsErr
+      });
+      return false;
+    }
+
+    // Se todas as tabelas na nuvem estiverem vazias, significa que não há nada para restaurar
+    const totalRemoteRecords = 
+      (remoteMenu?.length || 0) + 
+      (remoteTables?.length || 0) + 
+      (remoteOrders?.length || 0) + 
+      (remotePaymentMethods?.length || 0);
+
+    if (totalRemoteRecords === 0) {
+      console.log("[Restore] O Supabase não contém dados sincronizados. Abortando restauração.");
+      return false;
+    }
+
+    console.log(`[Restore] A repovoar IndexedDB local com ${totalRemoteRecords} registos descarregados do Supabase...`);
+
+    // 2. Limpar e preencher a tabela de artigos (Ementa)
+    if (remoteMenu && remoteMenu.length > 0) {
+      await db.menuItems.clear();
+      await db.menuItems.bulkAdd(
+        remoteMenu.map(item => ({
+          id: Number(item.id),
+          name: item.name,
+          price: Number(item.price),
+          category: item.category,
+          image: item.image || undefined
+        }))
+      );
+      console.log(`[Restore] Restaurados ${remoteMenu.length} artigos da ementa.`);
+    }
+
+    // 3. Limpar e preencher a tabela de mesas
+    if (remoteTables && remoteTables.length > 0) {
+      await db.restaurantTables.clear();
+      await db.restaurantTables.bulkAdd(
+        remoteTables.map(table => ({
+          id: Number(table.id),
+          number: Number(table.number),
+          status: table.status,
+          currentOrderTotal: Number(table.current_order_total || 0)
+        }))
+      );
+      console.log(`[Restore] Restauradas ${remoteTables.length} mesas.`);
+    }
+
+    // 4. Limpar e preencher a tabela de faturas/vendas
+    if (remoteOrders && remoteOrders.length > 0) {
+      await db.orders.clear();
+      await db.orders.bulkAdd(
+        remoteOrders.map(order => ({
+          id: Number(order.id),
+          tableId: Number(order.table_id),
+          items: order.items,
+          status: order.status,
+          total: Number(order.total),
+          createdAt: new Date(order.created_at).getTime(), // Converte ISO string para timestamp de milissegundos local
+          customerName: order.customer_name || undefined,
+          customerNif: order.customer_nif || undefined,
+          paymentMethod: order.payment_method || undefined
+        }))
+      );
+      console.log(`[Restore] Restauradas ${remoteOrders.length} faturas históricas.`);
+    }
+
+    // 5. Limpar e preencher a tabela de formas de pagamento
+    if (remotePaymentMethods && remotePaymentMethods.length > 0) {
+      await db.paymentMethods.clear();
+      await db.paymentMethods.bulkAdd(
+        remotePaymentMethods.map(method => ({
+          id: Number(method.id),
+          name: method.name,
+          icon: method.icon,
+          active: Boolean(method.active),
+          sortOrder: Number(method.sortOrder)
+        }))
+      );
+      console.log(`[Restore] Restauradas ${remotePaymentMethods.length} formas de pagamento.`);
+    }
+
+    console.log("[Restore] Restauração concluída com absoluto sucesso!");
+    return true;
+  } catch (error) {
+    console.error("[Restore] Erro catastrófico ao restaurar dados do Supabase:", error);
+    return false;
+  }
+}
+
+
