@@ -77,7 +77,8 @@ export default function App() {
   useEffect(() => {
     async function init() {
       await seedDatabase();
-      loadData();
+      await loadData();
+      syncMenuFromSupabase(); // Sincronizar ementa em segundo plano, sem bloquear o POS
     }
     init();
 
@@ -152,6 +153,35 @@ export default function App() {
   };
 
   // Recarregar dados do Dexie.js
+  // Sincronizar ementa do Supabase de forma assíncrona em background
+  const syncMenuFromSupabase = async () => {
+    if (!navigator.onLine) return;
+    console.log('A tentar sincronizar ementa do Supabase...');
+    try {
+      const { data: supabaseMenu, error } = await supabase
+        .from('menu_items')
+        .select('*');
+        
+      if (!error && supabaseMenu && supabaseMenu.length > 0) {
+        console.log('A atualizar ementa local com artigos do Supabase.');
+        await db.menuItems.clear();
+        await db.menuItems.bulkAdd(supabaseMenu.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          image: item.image
+        })));
+        
+        // Recarregar apenas os itens de menu para atualizar o ecrã
+        const allMenu = await db.menuItems.toArray();
+        setMenu(allMenu);
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar ementa do Supabase:', err);
+    }
+  };
+
   const loadData = async () => {
     let allTables = await db.restaurantTables.toArray();
     
@@ -170,33 +200,6 @@ export default function App() {
     if (duplicateIds.length > 0) {
       await db.restaurantTables.bulkDelete(duplicateIds);
       allTables = await db.restaurantTables.toArray();
-    }
-
-    // Sincronizar ementa do Supabase
-    console.log('A tentar carregar ementa do Supabase...');
-    try {
-      const { data: supabaseMenu, error } = await supabase
-        .from('menu_items')
-        .select('*');
-        
-      console.log('Resposta do Supabase:', { data: supabaseMenu, error });
-        
-      if (!error && supabaseMenu && supabaseMenu.length > 0) {
-        console.log('A atualizar base de dados local com', supabaseMenu.length, 'artigos.');
-        await db.menuItems.clear();
-        await db.menuItems.bulkAdd(supabaseMenu.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          category: item.category,
-          image: item.image
-        })));
-        console.log('Base de dados local atualizada.');
-      } else if (error) {
-        console.error('Erro na resposta do Supabase:', error);
-      }
-    } catch (err) {
-      console.error('Erro ao carregar ementa do Supabase:', err);
     }
 
     const allMenu = await db.menuItems.toArray();
@@ -534,6 +537,7 @@ export default function App() {
   // Forçar Sincronização Simulada
   const handleForceSync = () => {
     setIsSyncing(true);
+    syncMenuFromSupabase(); // Sincronizar ementa ativamente
     setTimeout(async () => {
       // Limpa a fila de sincronização pendente definindo como "synced"
       const pendings = await db.syncQueue.where({ status: 'pending' }).toArray();
