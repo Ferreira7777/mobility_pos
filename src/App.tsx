@@ -81,15 +81,54 @@ export default function App() {
     }
     init();
 
-    // Eventos de rede
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
+    // Função robusta para testar a ligação real ao Supabase (Heartbeat)
+    const checkRealConnection = async () => {
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        return;
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5 segundos de timeout
+        
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
+        // Testar ligação ao endpoint REST do Supabase
+        await fetch(`${supabaseUrl}/rest/v1/`, {
+          method: 'GET',
+          mode: 'no-cors',
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        setIsOnline(true);
+      } catch (err) {
+        setIsOnline(false);
+      }
+    };
+
+    // Executar verificação imediatamente
+    checkRealConnection();
+
+    // Agendar verificação a cada 10 segundos
+    const intervalId = setInterval(checkRealConnection, 10000);
+
+    // Eventos de rede para reagir instantaneamente
+    const goOnline = () => {
+      checkRealConnection();
+    };
+    const goOffline = () => {
+      setIsOnline(false);
+    };
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
 
     return () => {
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
+      clearInterval(intervalId);
     };
   }, []);
 
