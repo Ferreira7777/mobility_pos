@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import { ZReportModal } from './components/ZReportModal';
-import { supabase, syncOfflineData } from './supabaseClient';
+import { supabase, syncOfflineData, syncAllHistoricalOrders } from './supabaseClient';
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -554,11 +554,15 @@ export default function App() {
     setIsSyncing(true);
     syncMenuFromSupabase(); // Sincronizar ementa ativamente
     
-    // Executar a sincronização real das transações pendentes
-    syncOfflineData()
+    // Executar a sincronização de todas as vendas e mesas históricas + pendentes em paralelo
+    Promise.all([
+      syncAllHistoricalOrders(),
+      syncOfflineData()
+    ])
       .then(() => {
         setIsSyncing(false);
         loadData();
+        alert("Sincronização concluída! Todas as mesas e vendas locais foram sincronizadas com o Supabase.");
       })
       .catch(err => {
         console.error("Erro na sincronização forçada:", err);

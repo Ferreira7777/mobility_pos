@@ -182,3 +182,53 @@ if (typeof window !== 'undefined') {
     }
   }, 15000);
 }
+
+// Serviço de sincronização retroativa total das tabelas e vendas locais históricas
+export async function syncAllHistoricalOrders() {
+  if (!navigator.onLine) return;
+  console.log("Iniciando sincronização retroativa de todas as vendas e mesas...");
+
+  try {
+    // 1. Sincronizar todas as mesas locais com o Supabase
+    const localTables = await db.restaurantTables.toArray();
+    for (const table of localTables) {
+      await supabase
+        .from('restaurant_tables')
+        .upsert({
+          id: table.id,
+          number: table.number,
+          status: table.status,
+          current_order_total: table.currentOrderTotal,
+          updated_at: new Date().toISOString()
+        });
+    }
+    console.log(`[Sync] Sincronizadas ${localTables.length} mesas com o Supabase.`);
+
+    // 2. Sincronizar todas as vendas concluídas e arquivadas locais com o Supabase
+    const localOrders = await db.orders
+      .where('status')
+      .anyOf(['completed', 'archived'])
+      .toArray();
+
+    for (const order of localOrders) {
+      await supabase
+        .from('orders')
+        .upsert({
+          id: order.id,
+          table_id: order.tableId,
+          items: order.items,
+          status: order.status,
+          total: order.total,
+          created_at: new Date(order.createdAt).toISOString(),
+          customer_name: order.customerName || null,
+          customer_nif: order.customerNif || null,
+          payment_method: order.paymentMethod || null,
+          updated_at: new Date().toISOString()
+        });
+    }
+    console.log(`[Sync] Sincronizadas ${localOrders.length} vendas históricas com o Supabase.`);
+  } catch (error) {
+    console.error("Erro na sincronização histórica:", error);
+  }
+}
+
