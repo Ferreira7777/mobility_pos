@@ -1458,35 +1458,6 @@ export default function App() {
             <Receipt className="w-5 h-5" />
           </button>
 
-          {/* Botão de Sincronização manual */}
-          <button 
-            onClick={handleForceSync}
-            disabled={isSyncing}
-            className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-brand-700 dark:hover:text-brand-300 disabled:opacity-50 text-slate-700 dark:text-slate-300"
-            title="Sincronizar dados para supabase"
-          >
-            <UploadCloud className={`w-5 h-5 ${isSyncing ? 'animate-pulse text-brand-400' : ''}`} />
-          </button>
-
-          {/* Botão de Restaurar Dados do Supabase */}
-          <button 
-            onClick={handleRestoreFromSupabase}
-            disabled={isSyncing}
-            className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 disabled:opacity-50"
-            title="Restaurar Dados do Supabase"
-          >
-            <Download className={`w-5 h-5 ${isSyncing ? 'animate-pulse' : ''}`} />
-          </button>
-
-          {/* Botão de Limpar DB Local (Teste) */}
-          <button 
-            onClick={handleClearLocalDatabase}
-            className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-            title="Limpar DB Local (Teste de Restauro)"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-
           {/* Botão de Alternar Tema (Dark/Light) */}
           <button 
             onClick={toggleTheme}
@@ -1994,12 +1965,43 @@ export default function App() {
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 light:text-slate-600">Gerir artigos do menu e consultar o histórico de vendas</p>
               </div>
-              <button 
-                onClick={() => setShowAdminModal(false)}
-                className="w-9 h-9 rounded-xl glass-interactive flex items-center justify-center text-slate-500 dark:text-slate-400 light:text-slate-600 hover:text-slate-900 dark:hover:text-white light:text-slate-900"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Botão de Sincronização manual */}
+                <button 
+                  onClick={handleForceSync}
+                  disabled={isSyncing}
+                  className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-brand-700 dark:hover:text-brand-300 disabled:opacity-50 text-slate-700 dark:text-slate-300"
+                  title="Sincronizar dados para supabase"
+                >
+                  <UploadCloud className={`w-5 h-5 ${isSyncing ? 'animate-pulse text-brand-400' : ''}`} />
+                </button>
+
+                {/* Botão de Restaurar Dados do Supabase */}
+                <button 
+                  onClick={handleRestoreFromSupabase}
+                  disabled={isSyncing}
+                  className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 disabled:opacity-50"
+                  title="Restaurar Dados do Supabase"
+                >
+                  <Download className={`w-5 h-5 ${isSyncing ? 'animate-pulse' : ''}`} />
+                </button>
+
+                {/* Botão de Limpar DB Local (Teste) */}
+                <button 
+                  onClick={handleClearLocalDatabase}
+                  className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                  title="Limpar DB Local (Teste de Restauro)"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+
+                <button 
+                  onClick={() => setShowAdminModal(false)}
+                  className="w-9 h-9 rounded-xl glass-interactive flex items-center justify-center text-slate-500 dark:text-slate-400 light:text-slate-600 hover:text-slate-900 dark:hover:text-white light:text-slate-900"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Separadores do Painel */}
