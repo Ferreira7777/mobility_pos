@@ -643,6 +643,23 @@ export default function App() {
       });
   };
 
+  // Botão para limpar a base de dados local para efeitos de teste
+  const handleClearLocalDatabase = async () => {
+    const confirmClear = window.confirm(
+      "Aviso DE TESTE: Esta ação irá APAGAR TODOS os dados locais deste navegador! (Poderá recuperá-los de seguida com o botão de Restaurar). Tem a certeza?"
+    );
+    if (!confirmClear) return;
+    
+    await db.menuItems.clear();
+    await db.restaurantTables.clear();
+    await db.orders.clear();
+    await db.paymentMethods.clear();
+    await db.syncQueue.clear();
+    
+    loadData();
+    alert("Base de dados local limpa! O ecrã deverá estar vazio. Pode agora testar o botão de Restaurar.");
+  };
+
   // Processar carregamento de ficheiro local de imagem e converter para Base64
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1410,6 +1427,15 @@ export default function App() {
             title="Restaurar Dados do Supabase"
           >
             <Download className={`w-5 h-5 ${isSyncing ? 'animate-pulse' : ''}`} />
+          </button>
+
+          {/* Botão de Limpar DB Local (Teste) */}
+          <button 
+            onClick={handleClearLocalDatabase}
+            className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+            title="Limpar DB Local (Teste de Restauro)"
+          >
+            <Trash2 className="w-5 h-5" />
           </button>
 
           {/* Botão de Alternar Tema (Dark/Light) */}
