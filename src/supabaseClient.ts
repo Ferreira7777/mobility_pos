@@ -42,11 +42,12 @@ export async function syncOfflineData() {
           case 'update_table': {
             // Sincronizar estado da mesa no Supabase
             // payload: { id, status }
+            const localTable = await db.restaurantTables.get(payload.id);
             const { error } = await supabase
               .from('restaurant_tables')
               .upsert({
                 id: payload.id,
-                number: payload.id, // o número corresponde ao ID local das tabelas
+                number: localTable ? localTable.number : payload.id,
                 status: payload.status,
                 current_order_total: 0,
                 updated_at: new Date().toISOString()
@@ -108,11 +109,12 @@ export async function syncOfflineData() {
               });
 
             // 2. Libertar mesa no Supabase
+            const localTable = await db.restaurantTables.get(payload.tableId);
             const { error: tableError } = await supabase
               .from('restaurant_tables')
               .upsert({
                 id: payload.tableId,
-                number: payload.tableId,
+                number: localTable ? localTable.number : payload.tableId,
                 status: 'free',
                 current_order_total: 0,
                 updated_at: new Date().toISOString()
@@ -254,19 +256,16 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
     // Se houver erros graves nas consultas ao Supabase, aborta a restauração
     if (menuErr || tablesErr || ordersErr || paymentsErr) {
       console.error("[Restore] Falha ao descarregar tabelas do Supabase:", {
-        menuErr,
-        tablesErr,
-        ordersErr,
-        paymentsErr
+        menuErr, tablesErr, ordersErr, paymentsErr
       });
       return false;
     }
 
-    // Se todas as tabelas na nuvem estiverem vazias, significa que não há nada para restaurar
-    const totalRemoteRecords = 
-      (remoteMenu?.length || 0) + 
-      (remoteTables?.length || 0) + 
-      (remoteOrders?.length || 0) + 
+    // Se todas as tabelas na nuvem estiverem vazias, não há nada para restaurar
+    const totalRemoteRecords =
+      (remoteMenu?.length || 0) +
+      (remoteTables?.length || 0) +
+      (remoteOrders?.length || 0) +
       (remotePaymentMethods?.length || 0);
 
     if (totalRemoteRecords === 0) {
@@ -274,77 +273,79 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
       return false;
     }
 
-    console.log(`[Restore] A repovoar IndexedDB local com ${totalRemoteRecords} registos descarregados do Supabase...`);
+    console.log(`[Restore] A repovoar IndexedDB com ${totalRemoteRecords} registos do Supabase...`);
 
-    // 2. Limpar e preencher a tabela de artigos (Ementa)
+    // 2. Limpar e repor artigos da ementa (usar bulkPut = insert-or-replace sem conflitos de chave)
     if (remoteMenu && remoteMenu.length > 0) {
       await db.menuItems.clear();
-      await db.menuItems.bulkAdd(
+      await db.menuItems.bulkPut(
         remoteMenu.map(item => ({
           id: Number(item.id),
-          name: item.name,
+          name: String(item.name),
           price: Number(item.price),
-          category: item.category,
+          category: item.category as 'Comidas' | 'Bebidas' | 'Sobremesas' | 'Entradas',
           image: item.image || undefined
         }))
       );
-      console.log(`[Restore] Restaurados ${remoteMenu.length} artigos da ementa.`);
+      console.log(`[Restore] ✓ ${remoteMenu.length} artigos da ementa repostos.`);
     }
 
-    // 3. Limpar e preencher a tabela de mesas
+    // 3. Limpar e repor mesas
     if (remoteTables && remoteTables.length > 0) {
       await db.restaurantTables.clear();
-      await db.restaurantTables.bulkAdd(
+      await db.restaurantTables.bulkPut(
         remoteTables.map(table => ({
           id: Number(table.id),
           number: Number(table.number),
-          status: table.status,
+          status: table.status as 'free' | 'occupied' | 'payment_pending',
           currentOrderTotal: Number(table.current_order_total || 0)
         }))
       );
-      console.log(`[Restore] Restauradas ${remoteTables.length} mesas.`);
+      console.log(`[Restore] ✓ ${remoteTables.length} mesas repostas.`);
     }
 
-    // 4. Limpar e preencher a tabela de faturas/vendas
+    // 4. Limpar e repor faturas/vendas
     if (remoteOrders && remoteOrders.length > 0) {
       await db.orders.clear();
-      await db.orders.bulkAdd(
+      await db.orders.bulkPut(
         remoteOrders.map(order => ({
           id: Number(order.id),
           tableId: Number(order.table_id),
-          items: order.items,
-          status: order.status,
+          items: order.items || [],
+          status: order.status as 'active' | 'completed' | 'on_hold' | 'archived',
           total: Number(order.total),
-          createdAt: new Date(order.created_at).getTime(), // Converte ISO string para timestamp de milissegundos local
+          createdAt: new Date(order.created_at).getTime(),
           customerName: order.customer_name || undefined,
           customerNif: order.customer_nif || undefined,
           paymentMethod: order.payment_method || undefined
         }))
       );
-      console.log(`[Restore] Restauradas ${remoteOrders.length} faturas históricas.`);
+      console.log(`[Restore] ✓ ${remoteOrders.length} faturas históricas repostas.`);
     }
 
-    // 5. Limpar e preencher a tabela de formas de pagamento
+    // 5. Limpar e repor formas de pagamento
     if (remotePaymentMethods && remotePaymentMethods.length > 0) {
       await db.paymentMethods.clear();
-      await db.paymentMethods.bulkAdd(
+      await db.paymentMethods.bulkPut(
         remotePaymentMethods.map(method => ({
           id: Number(method.id),
-          name: method.name,
-          icon: method.icon,
+          name: String(method.name),
+          icon: String(method.icon),
           active: Boolean(method.active),
-          sortOrder: Number(method.sortOrder)
+          sortOrder: Number(method.sort_order ?? method.sortOrder ?? 0)
         }))
       );
-      console.log(`[Restore] Restauradas ${remotePaymentMethods.length} formas de pagamento.`);
+      console.log(`[Restore] ✓ ${remotePaymentMethods.length} formas de pagamento repostas.`);
     }
 
-    console.log("[Restore] Restauração concluída com absoluto sucesso!");
+    // Limpar a fila de sincronização para evitar uploads indevidos após o restauro
+    await db.syncQueue.clear();
+
+    console.log("[Restore] ✅ Restauração concluída com sucesso!");
     return true;
   } catch (error) {
-    console.error("[Restore] Erro catastrófico ao restaurar dados do Supabase:", error);
+    console.error("[Restore] ❌ Erro ao restaurar dados do Supabase:", error);
     return false;
   }
 }
-
 

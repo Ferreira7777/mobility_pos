@@ -99,6 +99,7 @@ export async function seedDatabase() {
   const tableCount = await db.restaurantTables.count();
   if (tableCount === 0) {
     await db.restaurantTables.bulkAdd([
+      { number: 0, status: 'free', currentOrderTotal: 0 }, // Balcão
       { number: 1, status: 'free', currentOrderTotal: 0 },
       { number: 2, status: 'free', currentOrderTotal: 0 },
       { number: 3, status: 'free', currentOrderTotal: 0 },
