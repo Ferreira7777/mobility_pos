@@ -302,10 +302,10 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
       console.log(`[Restore] ✓ ${remoteMenu.length} artigos da ementa repostos.`);
     }
 
-    // 3. Limpar e repor mesas — ignorar mesas "fantasma" (número > 20)
+    // 3. Limpar e repor mesas — ignorar mesas "fantasma" (número > 8)
     //    Reconciliar: mesas com faturas activas forçam status 'occupied'
     if (remoteTables && remoteTables.length > 0) {
-      const validTables = remoteTables.filter(t => Number(t.number) <= 20);
+      const validTables = remoteTables.filter(t => Number(t.number) <= 8);
 
       const activeTableIds = new Set(
         (remoteOrders || [])
