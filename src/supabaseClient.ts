@@ -52,7 +52,7 @@ export async function syncOfflineData() {
                 current_order_total: 0,
                 updated_at: new Date().toISOString()
               });
-            
+
             if (!error) success = true;
             else console.error("Erro ao sincronizar mesa no Supabase:", error);
             break;
@@ -77,11 +77,10 @@ export async function syncOfflineData() {
                   payment_method: localOrder.paymentMethod || null,
                   updated_at: new Date().toISOString()
                 });
-              
+
               if (!error) success = true;
               else console.error("Erro ao sincronizar pedido no Supabase:", error);
             } else {
-              // Se o pedido local já não existir, marcamos como sincronizado para desimpedir a fila
               success = true;
             }
             break;
@@ -91,7 +90,7 @@ export async function syncOfflineData() {
             // Sincronizar fecho de pagamento de mesa no Supabase
             // payload: { id, tableId, paymentMethod }
             const localOrder = await db.orders.get(payload.id);
-            
+
             // 1. Atualizar venda para concluída no Supabase
             const { error: orderError } = await supabase
               .from('orders')
@@ -147,12 +146,11 @@ export async function syncOfflineData() {
 
           default:
             console.warn(`Ação de sincronização desconhecida: ${action.action}`);
-            success = true; // Desimpedir a fila
+            success = true;
             break;
         }
 
         if (success) {
-          // Remover ou marcar como sincronizado
           await db.syncQueue.update(action.id!, { status: 'synced' });
           console.log(`[Sync] Sincronizada ação #${action.id} (${action.action}) com sucesso.`);
         } else {
@@ -275,7 +273,7 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
 
     console.log(`[Restore] A repovoar IndexedDB com ${totalRemoteRecords} registos do Supabase...`);
 
-    // 2. Limpar e repor artigos da ementa (usar bulkPut = insert-or-replace sem conflitos de chave)
+    // 2. Limpar e repor artigos da ementa (bulkPut = insert-or-replace, sem conflitos de chave)
     if (remoteMenu && remoteMenu.length > 0) {
       await db.menuItems.clear();
       await db.menuItems.bulkPut(
@@ -290,18 +288,40 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
       console.log(`[Restore] ✓ ${remoteMenu.length} artigos da ementa repostos.`);
     }
 
-    // 3. Limpar e repor mesas
+    // 3. Limpar e repor mesas — ignorar mesas "fantasma" (número > 20)
+    //    Reconciliar: mesas com faturas activas forçam status 'occupied'
     if (remoteTables && remoteTables.length > 0) {
+      const validTables = remoteTables.filter(t => Number(t.number) <= 20);
+
+      const activeTableIds = new Set(
+        (remoteOrders || [])
+          .filter(o => o.status === 'active' || o.status === 'on_hold')
+          .map(o => Number(o.table_id))
+      );
+
       await db.restaurantTables.clear();
       await db.restaurantTables.bulkPut(
-        remoteTables.map(table => ({
-          id: Number(table.id),
-          number: Number(table.number),
-          status: table.status as 'free' | 'occupied' | 'payment_pending',
-          currentOrderTotal: Number(table.current_order_total || 0)
-        }))
+        validTables.map(table => {
+          const tableId = Number(table.id);
+          const hasActiveOrder = activeTableIds.has(tableId);
+          const reconciledStatus: 'free' | 'occupied' | 'payment_pending' = hasActiveOrder
+            ? 'occupied'
+            : (table.status === 'free' ? 'free' : (table.status as 'free' | 'occupied' | 'payment_pending'));
+          const reconciledTotal = hasActiveOrder
+            ? (remoteOrders || [])
+                .filter(o => Number(o.table_id) === tableId && (o.status === 'active' || o.status === 'on_hold'))
+                .reduce((sum, o) => sum + Number(o.total), 0)
+            : 0;
+
+          return {
+            id: tableId,
+            number: Number(table.number),
+            status: reconciledStatus,
+            currentOrderTotal: reconciledTotal
+          };
+        })
       );
-      console.log(`[Restore] ✓ ${remoteTables.length} mesas repostas.`);
+      console.log(`[Restore] ✓ ${validTables.length} mesas repostas (com reconciliação de estado).`);
     }
 
     // 4. Limpar e repor faturas/vendas
@@ -320,7 +340,7 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
           paymentMethod: order.payment_method || undefined
         }))
       );
-      console.log(`[Restore] ✓ ${remoteOrders.length} faturas históricas repostas.`);
+      console.log(`[Restore] ✓ ${remoteOrders.length} faturas repostas.`);
     }
 
     // 5. Limpar e repor formas de pagamento
@@ -348,4 +368,3 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
     return false;
   }
 }
-
