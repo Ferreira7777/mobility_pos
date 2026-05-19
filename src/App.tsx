@@ -3,7 +3,7 @@ import { db, seedDatabase, type MenuItem, type RestaurantTable, type Order, type
 import { 
   Wifi, 
   WifiOff, 
-  RefreshCw, 
+  UploadCloud,
   Plus, 
   Minus, 
   Trash2, 
@@ -1463,9 +1463,9 @@ export default function App() {
             onClick={handleForceSync}
             disabled={isSyncing}
             className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-brand-700 dark:hover:text-brand-300 disabled:opacity-50 text-slate-700 dark:text-slate-300"
-            title="Sincronizar Dados"
+            title="Sincronizar dados para supabase"
           >
-            <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-brand-400' : ''}`} />
+            <UploadCloud className={`w-5 h-5 ${isSyncing ? 'animate-pulse text-brand-400' : ''}`} />
           </button>
 
           {/* Botão de Restaurar Dados do Supabase */}
