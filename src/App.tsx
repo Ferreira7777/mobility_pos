@@ -160,6 +160,29 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Restaurar dados automaticamente quando voltar a ter internet e o POS local estiver sem vendas/ações
+  useEffect(() => {
+    async function autoRestore() {
+      if (!isOnline) return;
+      try {
+        const localOrderCount = await db.orders.count();
+        const localQueueCount = await db.syncQueue.count();
+        // Se não houver vendas nem ações de sync locais, significa que a BD foi limpa/iniciada do zero
+        if (localOrderCount === 0 && localQueueCount === 0) {
+          console.log("[Auto-Restore] Detetada ligação à internet com POS sem vendas. A restaurar dados do Supabase...");
+          const success = await restoreDataFromSupabase();
+          if (success) {
+            await loadData();
+            console.log("[Auto-Restore] Restauro automático efetuado com sucesso!");
+          }
+        }
+      } catch (err) {
+        console.error("[Auto-Restore] Erro ao tentar restaurar automaticamente:", err);
+      }
+    }
+    autoRestore();
+  }, [isOnline]);
+
   // Selecionar mesa virtual do Balcão (número 0)
   const handleSelectCounter = async () => {
     let counterTable = tables.find(t => t.number === 0);
