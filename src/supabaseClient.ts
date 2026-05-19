@@ -309,7 +309,7 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
 
       const activeTableIds = new Set(
         (remoteOrders || [])
-          .filter(o => o.status === 'active' || o.status === 'on_hold')
+          .filter(o => o.status === 'active')
           .map(o => Number(o.table_id))
       );
 
@@ -323,7 +323,7 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
             : (table.status === 'free' ? 'free' : (table.status as 'free' | 'occupied' | 'payment_pending'));
           const reconciledTotal = hasActiveOrder
             ? (remoteOrders || [])
-                .filter(o => Number(o.table_id) === tableId && (o.status === 'active' || o.status === 'on_hold'))
+                .filter(o => Number(o.table_id) === tableId && o.status === 'active')
                 .reduce((sum, o) => sum + Number(o.total), 0)
             : 0;
 
