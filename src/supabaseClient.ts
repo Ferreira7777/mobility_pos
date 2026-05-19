@@ -382,3 +382,45 @@ export async function restoreDataFromSupabase(): Promise<boolean> {
     return false;
   }
 }
+
+export async function deleteSupabaseData(options: { articles: boolean; movements: boolean }) {
+  try {
+    if (options.movements) {
+      // 1. Apagar todas as faturas/pedidos do Supabase
+      const { error: ordersError } = await supabase
+        .from('orders')
+        .delete()
+        .gt('id', 0);
+      
+      if (ordersError) throw ordersError;
+
+      // 2. Colocar todas as mesas físicas de volta a 'free' no Supabase
+      const { error: tablesError } = await supabase
+        .from('restaurant_tables')
+        .update({ status: 'free' })
+        .gt('id', 0);
+
+      if (tablesError) throw tablesError;
+      
+      console.log("[Delete] ✓ Movimentos e estados de mesa limpos no Supabase.");
+    }
+
+    if (options.articles) {
+      // Apagar todos os artigos no Supabase
+      const { error: menuError } = await supabase
+        .from('menu_items')
+        .delete()
+        .gt('id', 0);
+
+      if (menuError) throw menuError;
+
+      console.log("[Delete] ✓ Artigos limpos no Supabase.");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Delete] ❌ Erro ao apagar dados no Supabase:", error);
+    throw error;
+  }
+}
+

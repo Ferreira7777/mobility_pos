@@ -24,11 +24,13 @@ import {
   LogOut,
   Printer,
   Download,
-  UserPlus
+  UserPlus,
+  Database,
+  AlertTriangle
 } from 'lucide-react';
 
 import { ZReportModal } from './components/ZReportModal';
-import { supabase, syncOfflineData, syncAllHistoricalOrders, restoreDataFromSupabase } from './supabaseClient';
+import { supabase, syncOfflineData, syncAllHistoricalOrders, restoreDataFromSupabase, deleteSupabaseData } from './supabaseClient';
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -46,6 +48,9 @@ export default function App() {
   // Estados do Modal de Gestão / Admin
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminTab, setAdminTab] = useState<'artigos' | 'vendas' | 'vendas_artigo' | 'pagamentos' | 'configuracoes'>('artigos');
+  const [showDeleteDBModal, setShowDeleteDBModal] = useState(false);
+  const [deleteDBOptions, setDeleteDBOptions] = useState({ articles: false, movements: false });
+  const [isDeletingDB, setIsDeletingDB] = useState(false);
   const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
@@ -707,6 +712,76 @@ export default function App() {
     
     loadData();
     alert("Base de dados local limpa! O ecrã deverá estar vazio. Pode agora testar o botão de Restaurar.");
+  };
+
+  const handleOpenDeleteDBModal = () => {
+    const warning = window.confirm(
+      "🔥 AVISO DE ALTO RISCO:\n\nEsta operação permite apagar dados de forma irreversível localmente (IndexedDB) e no servidor (Supabase)!\n\nPretende abrir as opções de eliminação?"
+    );
+    if (warning) {
+      setDeleteDBOptions({ articles: false, movements: false });
+      setShowDeleteDBModal(true);
+    }
+  };
+
+  const handleExecuteDeleteDB = async () => {
+    if (!deleteDBOptions.articles && !deleteDBOptions.movements) {
+      alert("Por favor, selecione pelo menos uma opção para eliminar.");
+      return;
+    }
+
+    const finalConfirm = window.prompt(
+      "⚠️ AVISO FINAL: Escreva 'CONFIRMAR ELIMINAÇÃO' em maiúsculas para executar a limpeza permanente no Supabase e Local:"
+    );
+    
+    if (finalConfirm !== "CONFIRMAR ELIMINAÇÃO") {
+      alert("Operação cancelada. A frase de confirmação não coincide.");
+      return;
+    }
+
+    setIsDeletingDB(true);
+    try {
+      // 1. Eliminar dados no Supabase
+      if (isOnline) {
+        await deleteSupabaseData(deleteDBOptions);
+      } else {
+        throw new Error("Não é possível apagar dados no Supabase sem ligação à Internet.");
+      }
+
+      // 2. Eliminar dados locais (IndexedDB) correspondentes
+      if (deleteDBOptions.movements) {
+        await db.orders.clear();
+        await db.syncQueue.clear(); // Limpar a fila local também
+        
+        // Atualizar estado das mesas locais para 'free' e zerar o total
+        const allTables = await db.restaurantTables.toArray();
+        await db.restaurantTables.bulkPut(
+          allTables.map(t => ({
+            ...t,
+            status: 'free',
+            currentOrderTotal: 0
+          }))
+        );
+        setSelectedTable(null);
+        setActiveOrder(null);
+      }
+
+      if (deleteDBOptions.articles) {
+        await db.menuItems.clear();
+        setMenu([]);
+      }
+
+      // 3. Atualizar dados no ecrã
+      await loadData();
+      
+      alert("Dados eliminados com sucesso localmente e no Supabase!");
+      setShowDeleteDBModal(false);
+    } catch (err: any) {
+      console.error("Erro ao eliminar base de dados:", err);
+      alert("Erro durante a eliminação: " + err.message);
+    } finally {
+      setIsDeletingDB(false);
+    }
   };
 
   // Processar carregamento de ficheiro local de imagem e converter para Base64
@@ -1995,6 +2070,15 @@ export default function App() {
                   <Trash2 className="w-5 h-5" />
                 </button>
 
+                {/* Botão de Eliminar dados no Supabase e Local */}
+                <button 
+                  onClick={handleOpenDeleteDBModal}
+                  className="glass-interactive flex items-center justify-center p-2.5 rounded-xl text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300"
+                  title="Eliminar dados no Supabase e Local"
+                >
+                  <Database className="w-5 h-5" />
+                </button>
+
                 <button 
                   onClick={() => setShowAdminModal(false)}
                   className="w-9 h-9 rounded-xl glass-interactive flex items-center justify-center text-slate-500 dark:text-slate-400 light:text-slate-600 hover:text-slate-900 dark:hover:text-white light:text-slate-900"
@@ -2483,6 +2567,85 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* MODAL DE APAGAR BASE DE DADOS (SUPABASE E LOCAL) */}
+      {showDeleteDBModal && (
+        <div className="fixed inset-0 bg-slate-100/90 dark:bg-slate-950 bg-white/80 dark:light:bg-slate-900/20 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="glass max-w-md w-full rounded-3xl overflow-hidden border border-red-500/20 dark:border-red-500/10 shadow-2xl">
+            {/* Cabeçalho */}
+            <div className="p-6 border-b border-red-500/20 dark:border-red-500/10 flex justify-between items-center bg-red-500/5 dark:bg-red-950/20 light:bg-red-50">
+              <div>
+                <h3 className="text-xl font-bold text-red-600 dark:text-red-400 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  Eliminar Dados (Supabase e Local)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 light:text-slate-600">Selecione o que pretende eliminar</p>
+              </div>
+              <button
+                onClick={() => setShowDeleteDBModal(false)}
+                className="w-9 h-9 rounded-xl glass-interactive flex items-center justify-center text-slate-500 dark:text-slate-400 light:text-slate-600 hover:text-slate-900 dark:hover:text-white light:text-slate-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Aviso */}
+            <div className="px-6 pt-6">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
+                <p className="text-xs text-red-700 dark:text-red-400 font-semibold leading-relaxed">
+                  ⚠️ AVISO: Esta operação irá apagar de forma definitiva e permanente os dados selecionados, tanto localmente neste navegador como na base de dados central no servidor Supabase! Esta ação não pode ser revertida.
+                </p>
+              </div>
+            </div>
+
+            {/* Checkboxes de Opções */}
+            <div className="p-6 space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-slate-900/5 dark:border-white/5 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-all">
+                <input 
+                  type="checkbox" 
+                  checked={deleteDBOptions.articles}
+                  onChange={(e) => setDeleteDBOptions({ ...deleteDBOptions, articles: e.target.checked })}
+                  className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500 dark:bg-slate-700 dark:border-slate-600"
+                />
+                <div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Artigos (Ementa)</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Apaga todos os produtos, categorias e ementa.</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-slate-900/5 dark:border-white/5 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-all">
+                <input 
+                  type="checkbox" 
+                  checked={deleteDBOptions.movements}
+                  onChange={(e) => setDeleteDBOptions({ ...deleteDBOptions, movements: e.target.checked })}
+                  className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500 dark:bg-slate-700 dark:border-slate-600"
+                />
+                <div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Movimentos (Faturas e Vendas)</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Limpa o histórico de vendas, relatórios e liberta as mesas.</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Ações */}
+            <div className="p-6 border-t border-slate-900/5 dark:border-white/5 bg-slate-100/50 dark:bg-slate-950/20 flex justify-end gap-3">
+              <button 
+                onClick={() => setShowDeleteDBModal(false)}
+                className="glass-interactive px-5 py-2.5 rounded-xl font-bold text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleExecuteDeleteDB}
+                disabled={isDeletingDB || (!deleteDBOptions.articles && !deleteDBOptions.movements)}
+                className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-500/20"
+              >
+                {isDeletingDB ? "A eliminar..." : "Confirmar Eliminação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ZReportModal 
         showZReportModal={showZReportModal}
         setShowZReportModal={setShowZReportModal}
