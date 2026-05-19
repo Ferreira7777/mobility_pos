@@ -521,10 +521,30 @@ export default function App() {
       customerName: name 
     });
 
+    // Sincronizar mudança de estado da fatura
+    await db.syncQueue.add({
+      action: 'create_order',
+      payload: JSON.stringify({ 
+        id: activeOrder.id, 
+        items: activeOrder.items, 
+        total: activeOrder.total 
+      }),
+      status: 'pending',
+      createdAt: Date.now()
+    });
+
     // Liberta a mesa virtual 0
     await db.restaurantTables.update(selectedTable.id!, { 
       status: 'free', 
       currentOrderTotal: 0 
+    });
+
+    // Sincronizar libertação do balcão
+    await db.syncQueue.add({
+      action: 'update_table',
+      payload: JSON.stringify({ id: selectedTable.id, status: 'free' }),
+      status: 'pending',
+      createdAt: Date.now()
     });
 
     setActiveOrder(null);
@@ -547,9 +567,30 @@ export default function App() {
 
     // Altera status de volta para 'active'
     await db.orders.update(order.id!, { status: 'active' });
+    
+    // Sincronizar retoma da fatura
+    await db.syncQueue.add({
+      action: 'create_order',
+      payload: JSON.stringify({ 
+        id: order.id, 
+        items: order.items, 
+        total: order.total 
+      }),
+      status: 'pending',
+      createdAt: Date.now()
+    });
+
     await db.restaurantTables.update(counterTable.id!, { 
       status: 'occupied', 
       currentOrderTotal: order.total 
+    });
+
+    // Sincronizar ocupação do balcão
+    await db.syncQueue.add({
+      action: 'update_table',
+      payload: JSON.stringify({ id: counterTable.id, status: 'occupied' }),
+      status: 'pending',
+      createdAt: Date.now()
     });
 
     setSelectedTable(counterTable);
@@ -562,6 +603,14 @@ export default function App() {
     e.stopPropagation(); // Evita que clique para retomar
     if (confirm("Tem a certeza que deseja eliminar esta conta em espera?")) {
       await db.orders.delete(orderId);
+      
+      await db.syncQueue.add({
+        action: 'delete_order',
+        payload: JSON.stringify({ id: orderId }),
+        status: 'pending',
+        createdAt: Date.now()
+      });
+      
       loadData();
     }
   };

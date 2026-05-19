@@ -36,7 +36,7 @@ export interface Order {
 
 export interface SyncAction {
   id?: number;
-  action: 'create_order' | 'update_table' | 'complete_order' | 'archive_orders';
+  action: 'create_order' | 'update_table' | 'complete_order' | 'archive_orders' | 'delete_order';
   payload: string; // JSON string representation
   status: 'pending' | 'synced' | 'failed';
   createdAt: number;

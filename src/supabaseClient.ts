@@ -144,6 +144,20 @@ export async function syncOfflineData() {
             break;
           }
 
+          case 'delete_order': {
+            // Sincronizar eliminação de fatura (ex: cancelar conta em espera)
+            // Para não quebrar histórico, optamos por marcar como 'archived' ou eliminar mesmo
+            // payload: { id: number }
+            const { error } = await supabase
+              .from('orders')
+              .delete()
+              .eq('id', payload.id);
+
+            if (!error) success = true;
+            else console.error("Erro ao eliminar fatura no Supabase:", error);
+            break;
+          }
+
           default:
             console.warn(`Ação de sincronização desconhecida: ${action.action}`);
             success = true;
